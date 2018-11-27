@@ -1,0 +1,16 @@
+Fitter Status : Successful - Tue Nov 27 01:51:15 2018
+Quartus II 64-Bit Version : 10.1 Build 197 01/19/2011 SP 1 SJ Web Edition
+Revision Name : CheatDevice
+Top-level Entity Name : CheatDevice
+Family : Cyclone IV E
+Device : EP4CE22F17C6
+Timing Models : Final
+Total logic elements : 517 / 22,320 ( 2 % )
+    Total combinational functions : 473 / 22,320 ( 2 % )
+    Dedicated logic registers : 301 / 22,320 ( 1 % )
+Total registers : 343
+Total pins : 51 / 154 ( 33 % )
+Total virtual pins : 0
+Total memory bits : 32,768 / 608,256 ( 5 % )
+Embedded Multiplier 9-bit elements : 0 / 132 ( 0 % )
+Total PLLs : 0 / 4 ( 0 % )

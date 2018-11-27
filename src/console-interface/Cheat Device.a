@@ -1,0 +1,671 @@
+﻿    processor 6502
+        include "vcs.h"
+        include "macro.h"
+        include "xmacro.h"
+
+;--------------------------------
+; This assembly language file was written to work with the 8bitworkshop IDE at
+; 8bitworkshop.com, and the include files are available there.
+
+;--------------------------------
+; Variables segment
+
+    seg.u Variables
+    org $80
+
+Temp                .byte
+PlayerScanLine      .byte
+
+PreviousReset       .byte
+
+BufferedJoyState    .byte
+PreviousJoyState    .byte
+JoyCountdown        .byte
+
+Char0 .word
+Char1 .word
+Char2 .word
+Char3 .word
+Char4 .word
+Char5 .word
+
+CurrentDigit .byte
+
+Digit0 .byte
+Digit1 .byte
+Digit2 .byte
+Digit3 .byte
+Digit4 .byte
+
+Digit5 .byte
+Digit6 .byte
+Digit7 .byte
+Digit8 .byte
+Digit9 .byte
+
+Digit10 .byte
+Digit11 .byte
+Digit12 .byte
+Digit13 .byte
+Digit14 .byte
+
+Cursor0 .byte
+Cursor1 .byte
+Cursor2 .byte
+Cursor3 .byte
+Cursor4 .byte
+
+Cursor5 .byte
+Cursor6 .byte
+Cursor7 .byte
+Cursor8 .byte
+Cursor9 .byte
+
+Cursor10 .byte
+Cursor11 .byte
+Cursor12 .byte
+Cursor13 .byte
+Cursor14 .byte
+
+THREE_COPIES equ %011
+
+;--------------------------------
+; Code segment
+
+    seg Code
+    org $f000
+
+Start
+    CLEAN_START
+
+    lda #0
+    sta PreviousReset
+
+    lda #$FF
+    sta BufferedJoyState
+    sta PreviousJoyState
+    lda #0
+    sta JoyCountdown
+
+    lda #0
+    sta CurrentDigit
+
+    lda #2
+    ldy #14
+
+InitializeDigit
+    sta Digit0,y
+    dey
+    bpl InitializeDigit
+
+    lda #0
+    ldy #14
+
+InitializeCursor
+    sta Cursor0,y
+    dey
+    bpl InitializeCursor
+
+    lda #36
+    sta Cursor0
+
+;--------------------------------
+; Start new frame.
+
+NextFrame
+    lsr SWCHB  ; Test game reset switch.
+    bcs CheckPreviousReset
+
+    ; Reset was pressed, but don't reset until it's released.
+    lda #1
+    sta PreviousReset       
+    jmp VerticalSync
+
+CheckPreviousReset
+    ; Reset is not pressed. If it was just released, then reset.
+    lda PreviousReset
+    bne Reset
+
+    jmp VerticalSync
+
+Reset
+    jmp ($FFFC)  ; Reset vector
+
+; 1 + 3 lines of VSYNC
+
+VerticalSync
+    VERTICAL_SYNC
+
+; 37 lines of underscan
+
+    TIMER_SETUP 37
+
+    lda #$80
+    sta COLUBK  ; Set the background color.
+    lda THREE_COPIES
+    sta NUSIZ0
+    sta NUSIZ1
+
+    ldy #5  ; How far to indent codes
+    sta WSYNC
+
+    TIMER_WAIT
+
+; 192 lines of frame
+
+    TIMER_SETUP 192
+
+HorizontalPositionDelay
+    dey
+    bpl HorizontalPositionDelay
+
+    nop
+    sta RESP0
+    sta RESP1
+
+    ldx #$10
+    stx HMP1
+    ldx #1
+    stx VDELP0
+    stx VDELP1
+    sta WSYNC
+    sta HMOVE
+
+    SKIP_SCANLINES 50
+
+    ; Draw first code.
+
+    lda #$EC    ; Yellow
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #0
+    jsr SetDigits
+    jsr DrawCode
+
+    ; Draw cursor if in first row.
+
+    lda #$34    ; Red
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #15
+    jsr SetDigits
+    jsr DrawCode
+
+    SKIP_SCANLINES 8
+
+    ; Draw second code.
+
+    lda #$EC    ; Yellow
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #5
+    jsr SetDigits
+    jsr DrawCode
+
+    ; Draw cursor if in second row.
+
+    lda #$34    ; Red
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #20
+    jsr SetDigits
+    jsr DrawCode
+
+    SKIP_SCANLINES 8
+
+    ; Draw third code.
+
+    lda #$EC    ; Yellow
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #10
+    jsr SetDigits
+    jsr DrawCode
+
+    ; Draw cursor if in third row.
+
+    lda #$34    ; Red
+    sta COLUP0  ; Player 0 color
+    sta COLUP1  ; Player 1 color
+
+    ldy #25
+    jsr SetDigits
+    jsr DrawCode
+
+    TIMER_WAIT
+
+; 29 lines of overscan
+
+    TIMER_SETUP 29
+
+    lda SWCHA
+    sta BufferedJoyState
+
+    lda PreviousJoyState
+    bne PreviousInputExists
+
+    lda BufferedJoyState
+    bne RespondToInput
+
+    jmp InputEnd
+
+PreviousInputExists
+    lda BufferedJoyState
+    bne MoreInputExists        
+
+; All buttons are released.
+
+    lda #0
+    sta JoyCountdown
+    jmp InputEnd
+
+MoreInputExists     
+    cmp PreviousJoyState
+    bne RespondToInput      
+
+    dec JoyCountdown
+    bne InputEnd
+
+RespondToInput
+    lda #15
+    sta JoyCountdown
+
+    lda #$10
+    bit BufferedJoyState
+    beq UpPressed
+
+    lda #$20
+    bit BufferedJoyState
+    beq DownPressed
+
+    lda #$40
+    bit BufferedJoyState
+    beq LeftPressed
+
+    lda #$80
+    bit BufferedJoyState
+    beq RightPressed
+
+    jmp InputEnd
+
+UpPressed
+    ldy CurrentDigit
+    lda Digit0,y
+    cmp #34
+    beq InputEnd
+    clc
+    adc #2  ; Increase cheat code digit value. Watch for this address in Verilog.
+    sta Digit0,y
+
+    jmp InputEnd
+
+DownPressed
+    ldy CurrentDigit
+    lda Digit0,y
+    cmp #2
+    beq InputEnd
+    sec
+    sbc #2  ; Decrease cheat code digit value. Watch for this address in Verilog.
+    sta Digit0,y
+
+    jmp InputEnd
+
+LeftPressed
+    lda CurrentDigit
+    cmp #0
+    beq InputEnd
+
+    ldy CurrentDigit
+    lda #0
+    sta Cursor0,y
+
+    dec CurrentDigit  ; Point to previous digit. Watch for this address in Verilog.
+
+    ldy CurrentDigit
+    lda #36
+    sta Cursor0,y
+
+    jmp InputEnd
+
+RightPressed
+    lda CurrentDigit
+    cmp #14
+    beq InputEnd
+
+    ldy CurrentDigit
+    lda #0
+    sta Cursor0,y
+
+    inc CurrentDigit  ; Point to next digit. Watch for this address in Verilog.
+
+    ldy CurrentDigit
+    lda #36
+    sta Cursor0,y
+
+    jmp InputEnd
+
+InputEnd
+    lda BufferedJoyState
+    sta PreviousJoyState
+
+    TIMER_WAIT
+
+; Total = 262 lines. Go to next frame.
+    jmp NextFrame
+
+SetDigits
+    lda FontData0
+    sta Char0
+    lda #>FontData
+    sta Char0 + 1
+
+    ldx Digit0,y
+    lda FontData0,x
+    sta Char1
+    lda #>FontData
+    sta Char1 + 1
+
+    iny
+
+    ldx Digit0,y
+    lda FontData0,x
+    sta Char2
+    lda #>FontData
+    sta Char2 + 1
+ 
+    iny
+
+    ldx Digit0,y
+    lda FontData0,x
+    sta Char3
+    lda #>FontData
+    sta Char3 + 1
+
+    iny
+
+    ldx Digit0,y
+    lda FontData0,x
+    sta Char4
+    lda #>FontData
+    sta Char4 + 1
+
+    iny
+
+    ldx Digit0,y
+    lda FontData0,x
+    sta Char5
+    lda #>FontData
+    sta Char5 + 1
+
+    rts
+
+DrawCode subroutine
+    ; Use six-digit score trick to draw cheat codes and cursor.
+
+    sta WSYNC
+
+    lda #7
+    sta PlayerScanLine
+
+CharacterLoop
+    ldy PlayerScanLine
+    lda (Char0),y
+    sta GRP0       
+    sta WSYNC
+    lda (Char1),y
+    sta GRP1
+    lda (Char2),y
+    sta GRP0
+    lda (Char5),y
+    sta Temp
+    lda (Char4),y
+    tax
+    lda (Char3),y
+    ldy Temp
+    sta GRP1
+    stx GRP0
+    sty GRP1
+    sta GRP0
+    dec PlayerScanLine
+    bpl CharacterLoop
+
+    lda #0
+    sta GRP0
+    sta GRP1
+    sta GRP0
+    sta GRP1
+
+    rts
+
+;--------------------------------
+; Font data
+
+    align $100
+
+FontData0 .word FontData
+FontData1 .word FontData + 8
+
+FontData2 .word FontData + 16
+FontData3 .word FontData + 24
+FontData4 .word FontData + 32
+FontData5 .word FontData + 40
+
+FontData6 .word FontData + 48
+FontData7 .word FontData + 56
+FontData8 .word FontData + 64
+FontData9 .word FontData + 72
+
+FontData10 .word FontData + 80
+FontData11 .word FontData + 88
+FontData12 .word FontData + 96
+FontData13 .word FontData + 104
+
+FontData14 .word FontData + 112
+FontData15 .word FontData + 120
+FontData16 .word FontData + 128
+FontData17 .word FontData + 136
+
+FontData18 .word FontData + 144
+
+FontData
+    ; Blank
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+
+    ; Dash
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #%01111100
+    .byte #0
+    .byte #0
+    .byte #0
+    .byte #0
+
+    ; 0 - A
+    .byte #0
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11111110
+    .byte #%11000110
+    .byte #%01101100
+    .byte #%00111000
+    .byte #%00010000
+
+    ; 1 - C
+    .byte #0
+    .byte #%01111100
+    .byte #%11000110
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000110
+    .byte #%01111100
+
+    ; 2 - D
+    .byte #0
+    .byte #%11111000
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11111000   
+
+    ; 3 - E
+    .byte #0
+    .byte #%11111110
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11111000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11111110
+
+    ; 4 - F
+    .byte #0
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11111000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11111110
+
+    ; 5 - H
+    .byte #0
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11111110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+
+    ; 6 - I
+    .byte #0
+    .byte #%01111110
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%01111110
+
+    ; 7 - L
+    .byte #0
+    .byte #%11111100
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11000000   
+
+    ; 8 - M
+    .byte #0
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11010110
+    .byte #%11111110
+    .byte #%11101110
+    .byte #%11000110
+
+    ; 9 - N
+    .byte #0
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11001110
+    .byte #%11011110
+    .byte #%11110110
+    .byte #%11100110
+    .byte #%11000110
+
+    ; A - O
+    .byte #0
+    .byte #%00111000
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%00111000
+
+    ; B - P
+    .byte #0
+    .byte #%11000000
+    .byte #%11000000
+    .byte #%11111100
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11111100
+
+    ; C - R
+    .byte #0
+    .byte #%11000110   
+    .byte #%11001100
+    .byte #%11111000      
+    .byte #%11001100
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11111100    
+
+    ; D - S
+    .byte #0
+    .byte #%00111000
+    .byte #%11000110
+    .byte #%00000110
+    .byte #%00111000
+    .byte #%11000000
+    .byte #%11000110
+    .byte #%00111000
+
+    ; E - T
+    .byte #0
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%00011000
+    .byte #%01111110
+
+    ; F - U
+    .byte #0
+    .byte #%00111000
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+    .byte #%11000110
+
+    ; Cursor
+    .byte #0
+    .byte #%00000000
+    .byte #%00000000
+    .byte #%00000000
+    .byte #%11111110
+    .byte #%01111100
+    .byte #%00111000
+    .byte #%00010000
+
+;--------------------------------
+; Epilogue
+
+    org $fffc
+    .word Start  ; Reset vector
+    .word Start  ; BRK vector

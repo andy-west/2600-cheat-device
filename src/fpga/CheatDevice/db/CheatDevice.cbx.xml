@@ -1,0 +1,6 @@
+<?xml version="1.0" ?>
+<LOG_ROOT>
+	<PROJECT NAME="CheatDevice">
+		<CBX_INST_ENTRY INSTANCE_NAME="|CheatDevice|CheatRom:rom|altsyncram:altsyncram_component" CBX_FILE_NAME="altsyncram_f791.tdf"/>
+	</PROJECT>
+</LOG_ROOT>
